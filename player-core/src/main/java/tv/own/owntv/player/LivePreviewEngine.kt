@@ -2795,6 +2795,24 @@ class LivePreviewEngine(
     override fun audioTracks(): List<TrackOption> = tune.audioTrackList
     override fun textTracks(): List<TrackOption> = tune.textTrackList
 
+    /** OwnTVnew: how far the stream has been read ahead of the picture, in ms (main thread). */
+    fun bufferAheadMs(): Long = player?.let { (it.bufferedPosition - it.currentPosition).coerceAtLeast(0L) } ?: 0L
+
+    /** OwnTVnew: each text track's codec ("teletext" for our DVB teletext tracks), by track id. */
+    fun textTrackCodecs(): Map<Int, String?> {
+        val p = player ?: return emptyMap()
+        val out = HashMap<Int, String?>()
+        var id = 0
+        for (group in p.currentTracks.groups) {
+            if (group.type != androidx.media3.common.C.TRACK_TYPE_TEXT) continue
+            for (i in 0 until group.length) {
+                val f = group.getTrackFormat(i)
+                out[id++] = f.codecs ?: f.sampleMimeType
+            }
+        }
+        return out
+    }
+
     /** Build the audio + subtitle track lists from the active stream so the HUD menus can switch language /
      *  subtitles (multi-track live channels, or a VOD file imported via M3U). Mirrors [ExoSubtitleEngine]. */
     private fun rebuildTracks(tracks: androidx.media3.common.Tracks) {
@@ -3185,13 +3203,17 @@ class LivePreviewEngine(
                 .setSampleMimeType(androidx.media3.common.MimeTypes.APPLICATION_CEA608)
                 .setAccessibilityChannel(1) // CC1 — the standard primary caption channel
                 .build()
+            // OwnTVnew: the same factory, wrapped to add DVB teletext and subtitle timing (ExoTeletext.kt).
+            val allTsFlags = androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory.FLAG_OVERRIDE_CAPTION_DESCRIPTORS or tsFlags
             cachedDefaultFactory = DefaultMediaSourceFactory(
                 cachedHttpDataSource!!,
-                androidx.media3.extractor.DefaultExtractorsFactory()
-                    .setTsExtractorFlags(
-                        androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory.FLAG_OVERRIDE_CAPTION_DESCRIPTORS or tsFlags,
-                    )
-                    .setTsSubtitleFormats(listOf(cc1)),
+                OwnTvExtractorsFactory(
+                    androidx.media3.extractor.DefaultExtractorsFactory()
+                        .setTsExtractorFlags(allTsFlags)
+                        .setTsSubtitleFormats(listOf(cc1)),
+                    allTsFlags,
+                    listOf(cc1),
+                ),
             ).setLoadErrorHandlingPolicy(playedLivePolicy)
                 .setDrmSessionManagerProvider(tv.own.owntv.core.drm.InlineClearKeyDrmProvider)
             cachedHlsCcFactory = HlsMediaSource.Factory(cachedHttpDataSource!!)
