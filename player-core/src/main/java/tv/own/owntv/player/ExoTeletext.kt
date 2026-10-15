@@ -178,10 +178,17 @@ private class TeletextReader(private val pages: List<TeletextPageInfo>) : Elemen
     private val pes = java.io.ByteArrayOutputStream()
     private val encoder = CueEncoder()
 
+    // A "clear" is held until the line has been up for a reading time (a new line replaces it at
+    // once): broadcasters often clear a teletext subtitle sooner than it can be read.
+    private val shownAtUs = LongArray(pages.size) { C.TIME_UNSET }
+    private val shownChars = IntArray(pages.size)
+    private val clearPending = BooleanArray(pages.size)
+
     override fun seek() {
         pes.reset()
         timeUs = C.TIME_UNSET
         decoders.forEach { it.reset() }
+        shownAtUs.fill(C.TIME_UNSET); clearPending.fill(false)
     }
 
     override fun createTracks(extractorOutput: ExtractorOutput, idGenerator: TsPayloadReader.TrackIdGenerator) {
@@ -225,19 +232,47 @@ private class TeletextReader(private val pages: List<TeletextPageInfo>) : Elemen
             if ((unitId == UNIT_SUBTITLE || unitId == UNIT_NON_SUBTITLE) && len >= UNIT_LEN) {
                 val packet = ByteArray(PACKET_LEN) { k -> reverse(buf[p + 4 + k]) }
                 for (i in decoders.indices) {
-                    decoders[i].packet(packet)?.let { cues -> emit(i, cues) }
+                    decoders[i].packet(packet)?.let { cues -> onPage(i, cues) }
                 }
             }
             p += 2 + len
         }
+        flushClears()
     }
 
-    private fun emit(i: Int, cues: List<Cue>) {
+    private fun onPage(i: Int, cues: List<Cue>) {
+        if (cues.isEmpty()) {
+            clearPending[i] = true
+            return
+        }
+        clearPending[i] = false
+        write(i, cues, timeUs)
+        shownAtUs[i] = timeUs
+        shownChars[i] = cues.sumOf { it.text?.length ?: 0 }
+    }
+
+    /** Clears whose line has now been up long enough, stamped when its reading time ran out. */
+    private fun flushClears() {
+        for (i in clearPending.indices) {
+            if (!clearPending[i]) continue
+            val since = shownAtUs[i]
+            val deadline = if (since == C.TIME_UNSET) timeUs else since + readingUs(shownChars[i])
+            if (timeUs < deadline) continue
+            clearPending[i] = false
+            write(i, emptyList(), deadline)
+            shownAtUs[i] = C.TIME_UNSET
+        }
+    }
+
+    private fun write(i: Int, cues: List<Cue>, atUs: Long) {
         val out = outputs[i] ?: return
         val bytes = encoder.encode(cues, C.TIME_UNSET)
         out.sampleData(ParsableByteArray(bytes), bytes.size)
-        out.sampleMetadata(timeUs, C.BUFFER_FLAG_KEY_FRAME, bytes.size, 0, null)
+        out.sampleMetadata(atUs, C.BUFFER_FLAG_KEY_FRAME, bytes.size, 0, null)
     }
+
+    /** 2.5 s for a short line up to 7 s for a long one (as the mpv overlay does). */
+    private fun readingUs(chars: Int): Long = (MIN_READ_US + PER_CHAR_US * chars).coerceAtMost(MAX_READ_US)
 
     private companion object {
         const val CODEC_LABEL = "teletext"
@@ -247,6 +282,9 @@ private class TeletextReader(private val pages: List<TeletextPageInfo>) : Elemen
         const val UNIT_SUBTITLE = 0x03
         const val UNIT_LEN = 44
         const val PACKET_LEN = 42
+        const val MIN_READ_US = 2_500_000L
+        const val MAX_READ_US = 7_000_000L
+        const val PER_CHAR_US = 60_000L
 
         fun reverse(b: Byte): Byte = (Integer.reverse(b.toInt() and 0xFF) ushr 24).toByte()
     }
