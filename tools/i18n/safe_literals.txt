@@ -4404,6 +4404,13 @@
 1	technical	player-core/src/main/java/tv/own/owntv/player/ExoSubtitleEngine.kt	vtt
 1	technical	player-core/src/main/java/tv/own/owntv/player/ExoSubtitleEngine.kt	webvtt
 1	technical	player-core/src/main/java/tv/own/owntv/player/ExoSubtitleEngine.kt	x-vnd.on2.vp9
+1	technical	player-core/src/main/java/tv/own/owntv/player/ExoTeletext.kt	#$§ÄÖÜ^_°äöüß
+1	technical	player-core/src/main/java/tv/own/owntv/player/ExoTeletext.kt	#¤ÉÄÖÅÜ_éäöåü
+1	protocol	player-core/src/main/java/tv/own/owntv/player/ExoTeletext.kt	teletext
+1	technical	player-core/src/main/java/tv/own/owntv/player/ExoTeletext.kt	£$@←½→↑#–¼‖¾÷
+1	technical	player-core/src/main/java/tv/own/owntv/player/ExoTeletext.kt	£$é°ç→↑#ùàòèì
+1	technical	player-core/src/main/java/tv/own/owntv/player/ExoTeletext.kt	ç$¡áéíóú¿üñèà
+1	technical	player-core/src/main/java/tv/own/owntv/player/ExoTeletext.kt	éïàëêùî#èâôûç
 1	log	player-core/src/main/java/tv/own/owntv/player/HeroPreviewEngine.kt	Hero preview error: ${error.errorCodeName}
 1	log	player-core/src/main/java/tv/own/owntv/player/HeroPreviewEngine.kt	Hero preview play failed for ${HttpClient.redactUrl(url)}
 1	log	player-core/src/main/java/tv/own/owntv/player/HeroPreviewEngine.kt	Hero preview produced no frame in ${NO_FRAME_TIMEOUT_MS}ms — falling back to the poster
